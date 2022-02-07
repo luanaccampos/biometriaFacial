@@ -46,10 +46,15 @@ class _CameraPageState extends State<CameraPage> {
     //log('${d.height} ${d.width}');
 
     var img = imglib.decodeImage(File(photo.path).readAsBytesSync())!;
-    img = imglib.copyCrop(img, w ~/ 4, h ~/ 4, w ~/ 2, h ~/ 2);
+    img = imglib.copyCrop(img, w ~/ 4, 7 * (h ~/ 20), w ~/ 2, 3 * (h ~/ 10));
     var b = imglib.encodePng(img);
 
     File f = await File(photo.path).writeAsBytes(b);
+
+    /*await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => Image.file(f)),
+    );*/
 
     Navigator.pop(context, f);
   }
@@ -86,7 +91,7 @@ class _CameraPageState extends State<CameraPage> {
                     alignment: Alignment.center,
                     child: FractionallySizedBox(
                       widthFactor: 0.5,
-                      heightFactor: 0.5,
+                      heightFactor: 0.3,
                       child: Container(
                         decoration: BoxDecoration(
                           color: Colors.black,
@@ -100,18 +105,21 @@ class _CameraPageState extends State<CameraPage> {
             ),
           ),
         ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            height: 70,
-            width: 70,
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(35), color: Colors.white),
-            child: IconButton(
-              icon: const Icon(Icons.camera_alt_outlined),
-              onPressed: takePicture,
-              color: Colors.black,
-              iconSize: 40,
+        Padding(
+          padding: const EdgeInsets.all(15),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              height: 70,
+              width: 70,
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(35), color: Colors.white),
+              child: IconButton(
+                icon: const Icon(Icons.camera_alt_outlined),
+                onPressed: takePicture,
+                color: Colors.black,
+                iconSize: 40,
+              ),
             ),
           ),
         ),

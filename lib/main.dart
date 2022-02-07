@@ -33,19 +33,36 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   final FaceRecognizer _faceRecognizer = FaceRecognizer();
-  List f1 = [], f2 = [];
-  late String p1 = '', p2 = '';
-  int t1 = 0, t2 = 0, t3 = 0;
+  late Pessoa p1, p2;
+  late bool load1, load2;
+  late int t1, t2;
+  late double sim;
   Color corAuth = const Color.fromRGBO(121, 68, 204, 1);
-  XFile? image;
-  File? input;
   Timer? _timer;
-  double p = 0;
+  Stopwatch stopwatch = Stopwatch();
 
-  void abre(bool f) async {
+  @override
+  void initState() {
+    _faceRecognizer.loadModel();
+    super.initState();
+
+    load1 = load2 = false;
+    Image img = const Image(image: AssetImage('assets/unknown.jpg'));
+    p1 = p2 = Pessoa(img, []);
+    t1 = t2 = 0;
+    sim = 0;
+
+    EasyLoading.addStatusCallback((status) {
+      if (status == EasyLoadingStatus.dismiss) {
+        _timer?.cancel();
+      }
+    });
+  }
+
+  void abreCameraPage(bool flag) async {
     List<CameraDescription> c = await availableCameras();
 
-    input = await Navigator.push(
+    File input = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CameraPage(
@@ -54,20 +71,35 @@ class _HomeState extends State<Home> {
       ),
     );
 
+    processaRostosImagem(input, flag);
+  }
+
+  void processaRostosImagem(File? input, bool flag) async {
     if (input != null) {
       await EasyLoading.show();
-      Stopwatch stopwatch = Stopwatch()..start();
-      bool r = await processaFace(f);
+
+      stopwatch.reset();
+      stopwatch.start();
+      var l = await _faceRecognizer.getEmbeddings(input.path);
       int t = stopwatch.elapsed.inMilliseconds;
-      f ? t1 = t : t2 = t;
+      stopwatch.stop();
 
-      log('Processar faces. Tempo de resposta: $t ms');
+      log('${l.length} detected faces.');
+      log('$t ms to process faces.');
 
-      if (r) {
-        setState(() {
-          f ? p1 = input!.path : p2 = input!.path;
-          corAuth = const Color.fromRGBO(121, 68, 204, 1);
-        });
+      if (l.isNotEmpty) {
+        Pessoa p = Pessoa(Image.file(File(input.path)), l);
+        if (flag) {
+          p1 = p;
+          load1 = true;
+          t1 = t;
+        } else {
+          p2 = p;
+          load2 = true;
+          t2 = t;
+        }
+
+        setState(() {});
         EasyLoading.showSuccess('Face detectada com sucesso!');
       } else {
         EasyLoading.showError('Nenhuma face detectada!');
@@ -75,73 +107,42 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<bool> processaFace(bool f) async {
-    var l = await _faceRecognizer.getEmbeddings(input!.path);
-
-    if (l.isNotEmpty) {
-      f ? f1 = l : f2 = l;
-      return true;
-    } else {
-      return false;
-    }
-  }
-
   void compara() {
-    bool r = false;
+    bool igual = false;
 
-    p = 0;
-
-    Stopwatch stopwatch = Stopwatch()..start();
-
-    for (var e1 in f1) {
-      for (var e2 in f2) {
-        p = _faceRecognizer.compare(e1, e2);
-
-        if (p >= 75) {
-          r = true;
+    for (var e1 in p1.emb) {
+      for (var e2 in p2.emb) {
+        sim = _faceRecognizer.compare(e1, e2);
+        if (sim >= 75) {
+          igual = true;
           break;
         }
       }
     }
 
-    t3 = stopwatch.elapsed.inMilliseconds;
-    log('Comparar faces. Tempo de resposta: $t3 ms');
+    if (igual) {
+      EasyLoading.showSuccess('Autenticado com sucesso!');
+      corAuth = Colors.greenAccent;
+    } else {
+      EasyLoading.showError('Falha na autenticação!');
+      corAuth = Colors.redAccent;
+    }
 
-    r
-        ? EasyLoading.showSuccess(
-            'Autenticado com sucesso! Precisão: ${p.toStringAsPrecision(4)}%')
-        : EasyLoading.showError('Autenticação falhou!');
-
-    setState(() {
-      r ? corAuth = Colors.greenAccent : corAuth = Colors.red;
-    });
+    setState(() {});
   }
 
   void reset() {
     setState(() {
-      p1 = p2 = '';
-      t1 = t2 = t3 = 0;
-      p = 0.0;
-
-      f1.clear();
-      f2.clear();
-
       corAuth = const Color.fromRGBO(121, 68, 204, 1);
+      p1.clear();
+      p2.clear();
+      t1 = t2 = 0;
+      sim = 0;
+      load1 = load2 = false;
     });
   }
 
-  @override
-  void initState() {
-    _faceRecognizer.loadModel();
-    super.initState();
-    EasyLoading.addStatusCallback((status) {
-      if (status == EasyLoadingStatus.dismiss) {
-        _timer?.cancel();
-      }
-    });
-  }
-
-  bool get imgsLoad => p1 != '' && p2 != '';
+  bool get imgsLoad => load1 && load2;
 
   @override
   Widget build(BuildContext context) {
@@ -163,51 +164,78 @@ class _HomeState extends State<Home> {
               Column(
                 children: [
                   GestureDetector(
-                    onTap: () => abre(true),
+                    onTap: () => abreCameraPage(true),
                     child: CircleAvatar(
                       radius: 70,
                       backgroundColor: corAuth,
                       child: CircleAvatar(
                         radius: 65,
-                        backgroundImage: p1 != ''
-                            ? Image.file(File(p1)).image
-                            : const AssetImage('assets/unknown.jpg'),
+                        backgroundImage: p1.img.image,
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 25),
-                    child: Text('${f1.length} faces'),
+                    padding: const EdgeInsets.all(15.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5),
+                          child: Text('$t1 ms'),
+                        ),
+                      ],
+                    ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 25),
-                    child: Text('$t1 ms'),
+                    padding: const EdgeInsets.all(5.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.face),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5),
+                          child: Text('${p1.emb.length}'),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
               Column(
                 children: [
                   GestureDetector(
-                    onTap: () => abre(false),
+                    onTap: () => abreCameraPage(false),
                     child: CircleAvatar(
                       radius: 70,
                       backgroundColor: corAuth,
                       child: CircleAvatar(
                         radius: 65,
-                        backgroundImage: p2 != ''
-                            ? Image.file(File(p2)).image
-                            : const AssetImage('assets/unknown.jpg'),
+                        backgroundImage: p2.img.image,
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 25),
-                    child: Text('${f2.length} faces'),
+                    padding: const EdgeInsets.all(15.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 5),
+                          child: Text('$t2 ms'),
+                        ),
+                      ],
+                    ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 25),
-                    child: Text('$t2 ms'),
-                  ),
+                    padding: const EdgeInsets.all(5),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.face),
+                        Padding(
+                            padding: const EdgeInsets.only(left: 5),
+                            child: Text('${p2.emb.length}')),
+                      ],
+                    ),
+                  )
                 ],
               )
             ],
@@ -232,16 +260,29 @@ class _HomeState extends State<Home> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 25),
-            child: Text('Similaridade ${p.toStringAsPrecision(4)}%'),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 25),
-            child: Text('$t3 ms'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.people),
+              Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: Text('${sim.toStringAsPrecision(3)} %')),
+            ],
           )
         ],
       ),
     );
+  }
+}
+
+class Pessoa {
+  Image img;
+  List emb = [];
+
+  Pessoa(this.img, this.emb);
+
+  void clear() {
+    img = const Image(image: AssetImage('assets/unknown.jpg'));
+    emb.clear();
   }
 }
